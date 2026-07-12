@@ -45,8 +45,8 @@ class YahooFinanceTool extends Tool {
   }
 }
 
-export async function researchCompany(companyName) {
-  // Initialize Groq model (free tier: 30 RPM, 14,400 RPD)
+export async function* researchCompanyStream(companyName) {
+  // Initialize Groq model
   const model = new ChatGroq({
     model: "llama-3.3-70b-versatile",
     temperature: 0.2,
@@ -62,38 +62,48 @@ export async function researchCompany(companyName) {
   });
 
   const systemPrompt = `You are an expert AI Investment Research Analyst. Your job is to research the given company and make a recommendation to either "Invest" or "Pass".
-You MUST return a valid JSON object with EXACTLY two properties: "decision" (either "Invest" or "Pass") and "reasoning" (a detailed paragraph explaining why, using the researched data). Do not include markdown code blocks in the Final Answer, just the JSON string.`;
+Provide a detailed paragraph explaining why based on the researched data. 
+You MUST conclude your final response EXACTLY with:
+DECISION: Invest
+or
+DECISION: Pass`;
 
   try {
-    const result = await agent.invoke({
+    const stream = await agent.streamEvents({
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Research ${companyName} and decide whether it is a good investment.` }
       ]
-    });
+    }, { version: "v2" });
 
-    // Extract the final message from the agent's output
-    const finalMessage = result.messages[result.messages.length - 1].content;
-    console.log("Raw agent output:", finalMessage);
-
-    // Try to parse the JSON
-    let parsedResult;
-    try {
-      let cleanOutput = finalMessage.replace(/```json/g, '').replace(/```/g, '').trim();
-      parsedResult = JSON.parse(cleanOutput);
-    } catch (e) {
-      console.error("Failed to parse JSON from agent:", e);
-      // Fallback object if parsing fails
-      parsedResult = {
-        decision: "Pass",
-        reasoning: "The agent failed to return a structured format. Here is the raw output: " + finalMessage
-      };
+    let fullResponse = "";
+    
+    for await (const event of stream) {
+      if (event.event === "on_chat_model_stream") {
+        const chunk = event.data.chunk;
+        if (chunk && chunk.content && typeof chunk.content === 'string') {
+          fullResponse += chunk.content;
+          yield { type: 'chunk', data: chunk.content };
+        }
+      } else if (event.event === "on_tool_start") {
+        yield { type: 'tool', data: `Analyzing using ${event.name}...` };
+      }
     }
 
-    return parsedResult;
+    // Extract decision from the final response
+    let decision = "Pass"; // Default fallback
+    const upperResp = fullResponse.toUpperCase();
+    if (upperResp.includes("DECISION: INVEST")) {
+      decision = "Invest";
+    }
+
+    // Clean up the text by removing the decision line so the UI looks nice
+    const reasoning = fullResponse.replace(/DECISION:\s*(Invest|Pass)/i, '').trim();
+
+    yield { type: 'done', decision, reasoning };
 
   } catch (error) {
     console.error("Agent execution failed:", error);
-    throw error;
+    yield { type: 'error', data: error.message };
   }
 }
