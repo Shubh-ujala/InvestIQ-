@@ -225,6 +225,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [streamData, setStreamData] = useState<{ companyName: string, tools: string[], reasoning: string, decision: string | null } | null>(null)
   const [chartData, setChartData] = useState<{ symbol: string, data: any[] } | null>(null)
+  const [chartError, setChartError] = useState<string | null>(null)
   const [history, setHistory] = useState<any[]>([])
   const [error, setError] = useState('')
   const { getToken } = useAuth()
@@ -272,6 +273,7 @@ function Dashboard() {
     setError('')
     setStreamData({ companyName: companyName.trim(), tools: [], reasoning: '', decision: null })
     setChartData(null)
+    setChartError(null)
 
     try {
       const token = await getToken()
@@ -280,13 +282,22 @@ function Dashboard() {
       fetch(`${import.meta.env.VITE_API_URL}/api/stock-chart?companyName=${encodeURIComponent(companyName)}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Failed to fetch chart');
+        }
+        return res.json();
+      })
       .then(data => {
         if (data.symbol && data.data) {
           setChartData(data);
         }
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error("Failed to fetch stock chart:", err);
+        setChartError(err.message || 'Stock chart currently unavailable.');
+      });
 
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/research`, {
         method: 'POST',
@@ -485,6 +496,13 @@ function Dashboard() {
             </div>
 
             {/* Stock Trend Graph */}
+            {chartError && (
+              <div className="mt-8 pt-6 border-t border-border/50 text-xs text-muted-foreground/75 flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground/60" />
+                <span>{chartError}</span>
+              </div>
+            )}
+            
             {chartData && (
               <div className="mt-8 pt-6 border-t border-border/50 animate-in slide-in-from-bottom-4 duration-500">
                 <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-4">
@@ -552,26 +570,31 @@ function Dashboard() {
 function HistoryCard({ item, onDelete }: { item: any, onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const [chartData, setChartData] = useState<{ symbol: string, data: any[] } | null>(null)
+  const [chartError, setChartError] = useState<string | null>(null)
   const [loadingChart, setLoadingChart] = useState(false)
   const { getToken } = useAuth()
   
   useEffect(() => {
     if (expanded && !chartData && !loadingChart) {
       setLoadingChart(true)
+      setChartError(null)
       const fetchChart = async () => {
         try {
           const token = await getToken()
           const res = await fetch(`${import.meta.env.VITE_API_URL}/api/stock-chart?companyName=${encodeURIComponent(item.companyName)}`, {
             headers: { Authorization: `Bearer ${token}` }
           })
-          if (res.ok) {
-            const data = await res.json()
-            if (data.symbol && data.data) {
-              setChartData(data)
-            }
+          if (!res.ok) {
+            const err = await res.json()
+            throw new Error(err.error || 'Failed to fetch chart')
           }
-        } catch (err) {
+          const data = await res.json()
+          if (data.symbol && data.data) {
+            setChartData(data)
+          }
+        } catch (err: any) {
           console.error("Failed to fetch history chart:", err)
+          setChartError(err.message || 'Stock chart currently unavailable.')
         } finally {
           setLoadingChart(false)
         }
@@ -630,6 +653,14 @@ function HistoryCard({ item, onDelete }: { item: any, onDelete: (id: string) => 
             </div>
           )}
 
+          {/* Chart Error State */}
+          {chartError && (
+            <div className="mt-6 pt-4 border-t border-border/50 text-xs text-muted-foreground/75 flex items-center gap-2 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground/60" />
+              <span>{chartError}</span>
+            </div>
+          )}
+
           {/* Chart Rendering inside expanded history card */}
           {chartData && (
             <div className="mt-6 pt-4 border-t border-border/50 animate-in slide-in-from-bottom-2 duration-300">
@@ -679,4 +710,4 @@ function HistoryCard({ item, onDelete }: { item: any, onDelete: (id: string) => 
   )
 }
 
-export default App
+export default App;

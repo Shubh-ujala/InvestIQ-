@@ -106,6 +106,10 @@ app.get('/api/history', ClerkExpressRequireAuth(), async (req, res) => {
   }
 });
 
+// In-memory cache for stock chart data (30 min TTL)
+const chartCache = new Map();
+const CACHE_TTL = 30 * 60 * 1000;
+
 // Fetch stock chart data for a company
 app.get('/api/stock-chart', ClerkExpressRequireAuth(), async (req, res) => {
   try {
@@ -114,18 +118,52 @@ app.get('/api/stock-chart', ClerkExpressRequireAuth(), async (req, res) => {
       return res.status(400).json({ error: 'Company name is required.' });
     }
 
-    // 1. Get Ticker Symbol
-    const searchResponse = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(companyName)}&quotesCount=1`);
-    const searchData = await searchResponse.json();
+    const cacheKey = companyName.toLowerCase().trim();
+    const cached = chartCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+      return res.json(cached.data);
+    }
 
+    // 1. Get Ticker Symbol
+    const yahooHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+
+    const searchResponse = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(companyName)}&quotesCount=1`, { headers: yahooHeaders });
+    
+    if (!searchResponse.ok) {
+      const errorText = await searchResponse.text();
+      console.warn(`Yahoo Finance Search failed with status ${searchResponse.status}:`, errorText);
+      const cleanError = errorText.toLowerCase().includes('too many requests') 
+        ? 'Yahoo Finance rate limit reached. Please try again later.'
+        : `Yahoo search error: ${searchResponse.status}`;
+      return res.status(searchResponse.status).json({ error: cleanError });
+    }
+    
+    const searchData = await searchResponse.json();
+    
     if (!searchData.quotes || searchData.quotes.length === 0) {
       return res.status(404).json({ error: 'Could not find stock ticker for this company.' });
     }
-
+    
     const symbol = searchData.quotes[0].symbol;
 
     // 2. Fetch Historical Data (3 months, 1 day interval)
-    const chartResponse = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=3mo&interval=1d`);
+    const chartResponse = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=3mo&interval=1d`, { headers: yahooHeaders });
+    
+    if (!chartResponse.ok) {
+      const errorText = await chartResponse.text();
+      console.warn(`Yahoo Finance Chart failed with status ${chartResponse.status}:`, errorText);
+      const cleanError = errorText.toLowerCase().includes('too many requests') 
+        ? 'Yahoo Finance rate limit reached. Please try again later.'
+        : `Yahoo chart error: ${chartResponse.status}`;
+      return res.status(chartResponse.status).json({ error: cleanError });
+    }
+
     const chartData = await chartResponse.json();
 
     if (!chartData.chart || !chartData.chart.result || chartData.chart.result.length === 0) {
@@ -150,7 +188,15 @@ app.get('/api/stock-chart', ClerkExpressRequireAuth(), async (req, res) => {
       }
     }
 
-    res.json({ symbol, data: formattedData });
+    const responsePayload = { symbol, data: formattedData };
+    
+    // Save to cache
+    chartCache.set(cacheKey, {
+      timestamp: Date.now(),
+      data: responsePayload
+    });
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Error fetching stock chart data:', error);
     res.status(500).json({ error: 'Failed to fetch stock chart data.' });
