@@ -512,7 +512,7 @@ function Dashboard() {
                       <Tooltip 
                         contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--foreground)' }}
                         itemStyle={{ color: 'var(--foreground)' }}
-                        formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
+                        formatter={(value) => [`$${(value as number).toFixed(2)}`, 'Price']}
                       />
                       <Line 
                         type="monotone" 
