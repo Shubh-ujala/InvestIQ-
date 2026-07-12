@@ -1,4 +1,4 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatGroq } from "@langchain/groq";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { Tool } from "@langchain/core/tools";
 
@@ -46,11 +46,11 @@ class YahooFinanceTool extends Tool {
 }
 
 export async function researchCompany(companyName) {
-  // Initialize the Gemini model
-  const model = new ChatGoogleGenerativeAI({
-    model: "gemini-2.5-flash",
-    maxOutputTokens: 2048,
-    temperature: 0.2, // Low temperature for more analytical reasoning
+  // Initialize Groq model (free tier: 30 RPM, 14,400 RPD)
+  const model = new ChatGroq({
+    model: "llama-3.3-70b-versatile",
+    temperature: 0.2,
+    apiKey: process.env.GROQ_API_KEY,
   });
 
   const tools = [new WikipediaTool(), new YahooFinanceTool()];
