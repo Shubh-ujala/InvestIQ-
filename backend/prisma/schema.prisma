@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ResearchReport {
+  id          String   @id @default(uuid())
+  userId      String   // The Clerk user ID
+  companyName String
+  decision    String
+  reasoning   String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
