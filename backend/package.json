@@ -22,9 +22,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "langchain": "^1.5.3"
-  },
-  "devDependencies": {
+    "langchain": "^1.5.3",
     "prisma": "^5.22.0"
   }
 }
