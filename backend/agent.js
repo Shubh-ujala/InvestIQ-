@@ -1,6 +1,8 @@
 import { ChatGroq } from "@langchain/groq";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { Tool } from "@langchain/core/tools";
+import fs from 'fs';
+import path from 'path';
 
 // A simple custom search tool simulating web research if DuckDuckGo isn't available, 
 // but we'll try to use a basic fetch-based Wikipedia search as a reliable free fallback
@@ -45,6 +47,38 @@ class YahooFinanceTool extends Tool {
   }
 }
 
+function logLLMInteraction(companyName, prompts, toolsUsed, fullResponse) {
+  try {
+    const logDir = path.resolve(process.cwd(), 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logPath = path.join(logDir, 'llm.log');
+    const timestamp = new Date().toISOString();
+    const logContent = `
+========================================
+[${timestamp}] RESEARCH REQUEST: ${companyName}
+========================================
+SYSTEM PROMPT:
+${prompts.system}
+
+USER PROMPT:
+${prompts.user}
+
+TOOLS TRIGGERED:
+${toolsUsed.length > 0 ? toolsUsed.join(', ') : 'None'}
+
+AGENT RESPONSE:
+${fullResponse}
+
+========================================
+\n`;
+    fs.appendFileSync(logPath, logContent, 'utf-8');
+  } catch (err) {
+    console.error("Failed to write to llm.log:", err);
+  }
+}
+
 export async function* researchCompanyStream(companyName) {
   // Initialize Groq model
   const model = new ChatGroq({
@@ -77,6 +111,7 @@ DECISION: Pass`;
     }, { version: "v2" });
 
     let fullResponse = "";
+    const toolsUsed = [];
     
     for await (const event of stream) {
       if (event.event === "on_chat_model_stream") {
@@ -86,6 +121,7 @@ DECISION: Pass`;
           yield { type: 'chunk', data: chunk.content };
         }
       } else if (event.event === "on_tool_start") {
+        toolsUsed.push(event.name);
         yield { type: 'tool', data: `Analyzing using ${event.name}...` };
       }
     }
@@ -99,6 +135,14 @@ DECISION: Pass`;
 
     // Clean up the text by removing the decision line so the UI looks nice
     const reasoning = fullResponse.replace(/DECISION:\s*(Invest|Pass)/i, '').trim();
+
+    // Log the entire agent trace to local file
+    logLLMInteraction(
+      companyName, 
+      { system: systemPrompt, user: `Research ${companyName} and decide whether it is a good investment.` }, 
+      toolsUsed, 
+      fullResponse
+    );
 
     yield { type: 'done', decision, reasoning };
 

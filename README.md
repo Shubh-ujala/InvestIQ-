@@ -16,6 +16,7 @@ InvestIQ is a premium, high-fidelity full-stack SaaS platform that allows users 
 - **Wikipedia Tooling**: Scrapes summaries and company structures automatically.
 - **Yahoo Finance Tooling**: Resolves the exact company ticker symbol, downloads business metrics, and matches recent financial headlines.
 - **AI Synthesis**: Consolidates raw data using Llama 3.3 (70B) to stream the reasoning process live into a Vercel-like card document.
+- **Detailed Local Logging**: Automatically appends full agent traces (system prompts, user queries, triggered tools, and model outputs) to `backend/logs/llm.log` for inspection and debugging.
 
 ### 3. Interactive Trend Analytics
 - **3-Month Stock Charts**: Integrates custom `<LineChart>` trends below the AI reasoning brief using Recharts.
@@ -95,3 +96,22 @@ VITE_API_URL="http://localhost:5000"
 
 - **Frontend**: Deploy `frontend/` as a project on **Vercel** with root directory set to `frontend`. Ensure environment variables (`VITE_CLERK_PUBLISHABLE_KEY` and `VITE_API_URL`) are configured.
 - **Backend**: Deploy `backend/` on **Railway**, **Render**, or **Fly.io**. Sync PostgreSQL server connection and Clerk credentials. Add environment variable `FRONTEND_URL` pointing to your Vercel deployment link to enable CORS.
+
+---
+
+## 🔍 Inspecting LLM & Agent Logs
+
+Every analysis performed by the AI agent is recorded locally on the backend server for auditing and prompt debugging.
+
+- **Log File Location**: `backend/logs/llm.log`
+- **Recorded Details**:
+  - Timestamp of execution
+  - System prompt (instructions and guidelines)
+  - User prompt (the company being evaluated)
+  - Intermediary tools triggered (e.g., `wikipedia-search`, `yahoo-finance-search`)
+  - Full streamed LLM output, including the raw verdict block.
+
+To view logs in real time during local testing, you can use:
+```bash
+tail -f backend/logs/llm.log
+```
