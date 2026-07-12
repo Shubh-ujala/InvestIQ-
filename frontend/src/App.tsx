@@ -551,6 +551,35 @@ function Dashboard() {
 
 function HistoryCard({ item, onDelete }: { item: any, onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false)
+  const [chartData, setChartData] = useState<{ symbol: string, data: any[] } | null>(null)
+  const [loadingChart, setLoadingChart] = useState(false)
+  const { getToken } = useAuth()
+  
+  useEffect(() => {
+    if (expanded && !chartData && !loadingChart) {
+      setLoadingChart(true)
+      const fetchChart = async () => {
+        try {
+          const token = await getToken()
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/stock-chart?companyName=${encodeURIComponent(item.companyName)}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.symbol && data.data) {
+              setChartData(data)
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch history chart:", err)
+        } finally {
+          setLoadingChart(false)
+        }
+      }
+      fetchChart()
+    }
+  }, [expanded, item.companyName, chartData, loadingChart, getToken])
+
   const isInvest = item.decision?.toLowerCase() === 'invest'
 
   return (
@@ -588,11 +617,62 @@ function HistoryCard({ item, onDelete }: { item: any, onDelete: (id: string) => 
       </div>
       
       {/* Expanded Content */}
-      <div className={`transition-all duration-300 ease-in-out ${expanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`transition-all duration-300 ease-in-out ${expanded ? 'max-h-[1200px] opacity-100' : 'max-h-0 opacity-0'}`}>
         <div className="p-4 pt-0 border-t border-border/50">
           <div className="mt-4 text-foreground/80 text-sm font-normal leading-relaxed whitespace-pre-wrap">
             {item.reasoning}
           </div>
+
+          {/* Loading Chart State */}
+          {loadingChart && (
+            <div className="mt-6 pt-4 border-t border-border/50 flex justify-center py-4">
+              <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {/* Chart Rendering inside expanded history card */}
+          {chartData && (
+            <div className="mt-6 pt-4 border-t border-border/50 animate-in slide-in-from-bottom-2 duration-300">
+              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                {chartData.symbol} - 3 Month Trend
+              </h4>
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData.data}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.1} />
+                    <XAxis 
+                      dataKey="date" 
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                      minTickGap={30}
+                    />
+                    <YAxis 
+                      domain={['auto', 'auto']}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
+                      tickFormatter={(value) => `$${value}`}
+                      width={50}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'var(--background)', borderColor: 'var(--border)', borderRadius: '8px', color: 'var(--foreground)', fontSize: 11 }}
+                      itemStyle={{ color: 'var(--foreground)' }}
+                      formatter={(value) => [`$${(value as number).toFixed(2)}`, 'Price']}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="price" 
+                      stroke="var(--primary)" 
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 3, fill: 'var(--primary)' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -29,29 +29,29 @@ app.use(express.json());
 app.post('/api/research', ClerkExpressRequireAuth(), async (req, res) => {
   try {
     const { companyName } = req.body;
-    
+
     if (!companyName) {
       return res.status(400).json({ error: 'Company name is required.' });
     }
 
     console.log(`Researching company: ${companyName}`);
-    
+
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    
+
     // Stream chunks back to client
     let finalDecision = "Pass";
     let finalReasoning = "";
 
     for await (const chunk of researchCompanyStream(companyName)) {
       res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-      
+
       if (chunk.type === 'error') {
         throw new Error(chunk.data);
       }
-      
+
       if (chunk.type === 'done') {
         finalDecision = chunk.decision;
         finalReasoning = chunk.reasoning;
@@ -117,11 +117,11 @@ app.get('/api/stock-chart', ClerkExpressRequireAuth(), async (req, res) => {
     // 1. Get Ticker Symbol
     const searchResponse = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(companyName)}&quotesCount=1`);
     const searchData = await searchResponse.json();
-    
+
     if (!searchData.quotes || searchData.quotes.length === 0) {
       return res.status(404).json({ error: 'Could not find stock ticker for this company.' });
     }
-    
+
     const symbol = searchData.quotes[0].symbol;
 
     // 2. Fetch Historical Data (3 months, 1 day interval)
@@ -161,7 +161,7 @@ app.get('/api/stock-chart', ClerkExpressRequireAuth(), async (req, res) => {
 app.delete('/api/history/:id', ClerkExpressRequireAuth(), async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Ensure the report belongs to the user
     const report = await prisma.researchReport.findUnique({
       where: { id }
