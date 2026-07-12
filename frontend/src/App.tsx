@@ -135,7 +135,11 @@ function Dashboard() {
       setHistory(prev => [response.data, ...prev])
     } catch (err: any) {
       console.error(err)
-      setError(err.response?.data?.error || err.message || 'An error occurred during research')
+      if (err.response?.status === 429) {
+        setError('⏳ Gemini API rate limit reached. Please wait a minute and try again.')
+      } else {
+        setError(err.response?.data?.error || err.message || 'An error occurred during research')
+      }
     } finally {
       setLoading(false)
     }

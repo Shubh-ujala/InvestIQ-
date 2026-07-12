@@ -52,7 +52,24 @@ app.post('/api/research', ClerkExpressRequireAuth(), async (req, res) => {
     res.json(savedReport);
   } catch (error) {
     console.error('Error during research:', error);
-    res.status(500).json({ error: 'Failed to conduct research.', details: error.message });
+
+    // Detect Gemini API rate limit errors (429)
+    const errMsg = error?.message || '';
+    const isRateLimit =
+      error?.status === 429 ||
+      errMsg.includes('429') ||
+      errMsg.toLowerCase().includes('rate limit') ||
+      errMsg.toLowerCase().includes('quota') ||
+      errMsg.toLowerCase().includes('resource_exhausted');
+
+    if (isRateLimit) {
+      return res.status(429).json({
+        error: 'Gemini API rate limit reached. Please wait a minute and try again.',
+        details: 'The free Gemini API allows 15 requests per minute and 1,500 per day.'
+      });
+    }
+
+    res.status(500).json({ error: 'Failed to conduct research.', details: errMsg });
   }
 });
 
